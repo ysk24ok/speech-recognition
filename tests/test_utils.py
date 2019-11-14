@@ -1,3 +1,4 @@
+import pytest
 import torch
 from torch.utils.data import DataLoader, Dataset
 
@@ -75,3 +76,27 @@ def test_collate_for_ctc():
     assert(input_lengths.tolist() == [3, 6])
     assert(isinstance(label_lengths, torch.Tensor))
     assert(label_lengths.tolist() == [3, 4])
+
+
+@pytest.fixture
+def progress_table():
+    return utils.ProgressTable('int', 'str', 'float')
+
+
+def test_header(progress_table):
+    got = progress_table._header()
+    assert(got == '| int | str | float |')
+
+
+def test_row(progress_table):
+    got = progress_table._row(1, 'ss', 3.543)
+    assert(got == '|   1 |  ss |  3.54 |')
+
+
+def test_row_longer_value_than_header(progress_table):
+    got = progress_table._row(1234, 'ss', 3.543)
+    assert(got == '| 1234 |  ss |  3.54 |')
+    got = progress_table._row(1, 'abcd', 3.543)
+    assert(got == '|   1 | abcd |  3.54 |')
+    got = progress_table._row(1, 'ss', 123456.543)
+    assert(got == '|   1 |  ss | 123456.54 |')

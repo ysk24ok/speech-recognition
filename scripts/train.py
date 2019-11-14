@@ -5,7 +5,10 @@ from torch.utils.data import DataLoader
 
 from asr import acoustic_model
 from asr import phonemes
-from asr.dataset import AudioDataset
+from asr.dataset import (
+    TrainingDatasetRepository,
+    DevelopmentDatasetRepository
+)
 from asr.feature import FeatureParams
 from asr.utils import collate_for_ctc
 
@@ -19,6 +22,9 @@ parser.add_argument('--feature-params-path', type=str,
 parser.add_argument('--training-data-path', type=str,
                     default='training_data.bin',
                     help='Training data path to load')
+parser.add_argument('--development-data-path', type=str,
+                    default='development_data.bin',
+                    help='Development data path to load')
 parser.add_argument('--hidden-size', type=int, default=256,
                     help='hidden layer size of an acoustic model')
 parser.add_argument('--num-layers', type=int, default=4,
@@ -35,10 +41,18 @@ parser.add_argument('--model-path', type=str, default="model.bin",
 args = parser.parse_args()
 
 print('Loading training data ...')
-dataset = AudioDataset.load(args.training_data_path)
-dataset.to_torch()
-dataloader = DataLoader(dataset, batch_size=args.batch_size,
-                        collate_fn=collate_for_ctc)
+dataset_tr = TrainingDatasetRepository(args.training_data_path).load()
+dataset_tr.to_torch()
+dataloader_tr = DataLoader(dataset_tr, batch_size=args.batch_size,
+                           collate_fn=collate_for_ctc)
+print('Loading development data ...')
+dataloaders_dev = []
+datasets_dev = DevelopmentDatasetRepository(args.development_data_path).load()
+for dataset_dev in datasets_dev:
+    dataset_dev.to_torch()
+    dataloader_dev = DataLoader(dataset_dev, batch_size=args.batch_size,
+                                collate_fn=collate_for_ctc)
+    dataloaders_dev.append(dataloader_dev)
 print('Training ...')
 num_labels = len(phonemes)
 feature_params = FeatureParams.load(args.feature_params_path)
@@ -51,6 +65,6 @@ else:
     raise ValueError('model_type: {} is not supported.'.format(
         args.model_type))
 model.set_optimizer(args.optimizer, args.lr)
-model.train(dataloader, args.epochs)
+model.train(dataloader_tr, dataloaders_dev, args.epochs)
 print('Saving model ...')
 model.save(args.model_path)

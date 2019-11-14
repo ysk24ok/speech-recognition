@@ -1,7 +1,12 @@
 import argparse
 
 from asr import phonemes, kana_phoneme_mapping
-from asr.dataset import CSJParser, AudioDataset
+from asr.dataset import (
+    CSJParser,
+    AudioDataset,
+    TrainingDatasetRepository,
+    DevelopmentDatasetRepository
+)
 from asr.decoder import Lexicon
 from asr.feature import FeatureParams
 
@@ -20,6 +25,9 @@ parser.add_argument('--feature-params-path', type=str,
 parser.add_argument('--training-data-path', type=str,
                     default='training_data.bin',
                     help='Training data path to save')
+parser.add_argument('--development-data-path', type=str,
+                    default='development_data.bin',
+                    help='Development data path to save')
 parser.add_argument('--dataset-type', type=str, default='csj',
                     help='Dataset type to use')
 parser.add_argument('path', type=str, help='Dataset path')
@@ -35,11 +43,13 @@ feature_params = FeatureParams(
 lexicon = Lexicon(phonemes, kana_phoneme_mapping)
 if args.dataset_type == 'csj':
     csj_parser = CSJParser(args.path, lexicon)
-    data, labels = csj_parser.parse(feature_params)
+    tr_set, dev_sets = csj_parser.parse(feature_params)
+    dataset_tr = AudioDataset(tr_set[0], tr_set[1])
+    datasets_dev = [AudioDataset(dev[0], dev[1]) for dev in dev_sets]
 else:
     raise ValueError('dataset_type: {} is not supported'.format(
         args.dataset_type))
-dataset = AudioDataset(data, labels)
-print('Saving trainig data ...')
+print('Saving trainig and development data ...')
 feature_params.save(args.feature_params_path)
-dataset.save(args.training_data_path)
+TrainingDatasetRepository(args.training_data_path).save(dataset_tr)
+DevelopmentDatasetRepository(args.development_data_path).save(datasets_dev)

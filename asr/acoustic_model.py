@@ -3,6 +3,8 @@ from abc import ABCMeta, abstractmethod
 
 import torch
 
+from asr.utils import ProgressTable
+
 
 class AcousticModel(metaclass=ABCMeta):
 
@@ -106,11 +108,14 @@ class EESENAcousticModel(AcousticModel):
             output = self.module(data)
             return output.argmax(axis=2)
 
-    def train(self, dataloader, epochs, save_per_epoch=False):
+    def train(self, dataloader_tr, dataloaders_dev, epochs,
+              save_per_epoch=False):
         """
         Args:
-            dataloader (torch.utils.data.dataloader.DataLoader):
-                Dataloader object
+            dataloader_tr (torch.utils.data.dataloader.DataLoader):
+                Dataloader object to be used for training
+            dataloaders_dev (list[torch.utils.data.dataloader.DataLoader]):
+                Dataloader objects to be used for development
             epochs (int): number of epochs
             save_per_epoch (bool): a flag to save the model per epoch
         """
@@ -118,9 +123,13 @@ class EESENAcousticModel(AcousticModel):
             msg = 'Optimizer is not set. Call set_optimizer method first.'
             raise ValueError(msg)
         start_time = time.time()
+        progress_table = ProgressTable(
+            'epoch', 'elapsed (sec)', 'tr loss',
+            *['dev{} loss'.format(i+1) for i in range(len(dataloaders_dev))])
+        progress_table.print_header()
         for epoch in range(epochs):
-            total_loss = 0
-            for data, labels, input_lengths, label_lengths in dataloader:
+            loss_tr = 0
+            for data, labels, input_lengths, label_lengths in dataloader_tr:
                 self.optimizer.zero_grad()
                 data = data.detach().requires_grad_().to(self.device)
                 labels = labels.to(self.device)
@@ -131,10 +140,28 @@ class EESENAcousticModel(AcousticModel):
                     output, labels, input_lengths, label_lengths)
                 loss.backward()
                 self.optimizer.step()
-
-                total_loss += loss.item()
-            print('| epoch {:3d} | {:5.2f} sec | total loss {:5.2f} |'.format(
-                epoch, time.time() - start_time, total_loss))
+                loss_tr += loss.item()
+            losses_dev = []
+            for dataloader_dev in dataloaders_dev:
+                loss_dev = 0
+                for data, labels, input_lengths, label_lengths in dataloader_dev:
+                    data = data.to(self.device)
+                    labels = labels.to(self.device)
+                    input_lengths = input_lengths.to(self.device)
+                    label_lengths = label_lengths.to(self.device)
+                    output = self.module(data)
+                    loss = self.ctc_loss(
+                        output, labels, input_lengths, label_lengths)
+                    loss_dev += loss.item()
+                losses_dev.append(loss_dev)
+            progress_table.print_row(
+                epoch, time.time() - start_time, loss_tr, *losses_dev)
+            """
+            print('| epoch {:3d} | {:5.2f} sec | total loss {:5.2f} '
+                    '| dev1 loss {:5.2f} | dev2 loss {:5.2f} | dev3 loss {:5.2f} |'.format(
+                epoch, time.time() - start_time, loss_tr,
+                losses_dev[0], losses_dev[1], losses_dev[2]))
+            """
             self.save('./tmp/eesen_model_epoch_{}.bin'.format(epoch))
             start_time = time.time()
 

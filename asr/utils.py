@@ -54,3 +54,29 @@ def collate_for_ctc(l):
         torch.tensor(label_lengths, dtype=torch.int)
     )
     return ret
+
+
+class ProgressTable(object):
+
+    def __init__(self, *columns):
+        self.columns = columns
+
+    def _header(self):
+        return '| {} |'.format(' | '.join(self.columns))
+
+    def _row(self, *values):
+        assert(len(values) == len(self.columns))
+        row = []
+        for c, v in zip(self.columns, values):
+            if type(v) == float:
+                f = '{:>{}.2f}'.format(v, len(c))
+            else:
+                f = '{:>{}}'.format(v, len(c))
+            row.append(f)
+        return '| {} |'.format(' | '.join(row))
+
+    def print_header(self):
+        print(self._header())
+
+    def print_row(self, *values):
+        print(self._row(*values))

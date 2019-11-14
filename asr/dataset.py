@@ -2,6 +2,7 @@ import csv
 import os
 import pickle
 import xml.dom.minidom
+from abc import ABCMeta, abstractmethod
 
 import numpy
 import torch
@@ -74,6 +75,20 @@ class CSJParser(object):
         lexicon (asr.decoder.Lexicon): Lexicon object
     """
 
+    # See chapter 5 in https://pj.ninjal.ac.jp/corpus_center/csj/manu-f/asr.pdf
+    talk_ids_for_devset_1 = [
+        'A01M0097', 'A01M0110', 'A01M0137', 'A03M0106', 'A03M0112',
+        'A03M0156', 'A04M0051', 'A04M0121', 'A04M0123', 'A05M0011'
+    ]
+    talk_ids_for_devset_2 = [
+        'A01M0056', 'A01M0141', 'A02M0012', 'A03M0016', 'A06M0064',
+        'A01F0001', 'A01F0034', 'A01F0063', 'A03F0072', 'A06F0135'
+    ]
+    talk_ids_for_devset_3 = [
+        'S00M0008', 'S00M0070', 'S00M0079', 'S00M0112', 'S00M0213',
+        'S00F0019', 'S00F0066', 'S00F0148', 'S00F0152', 'S01F0105'
+    ]
+
     def __init__(self, base_dir, lexicon):
         self.base_dir = base_dir
         self.xml_dir = os.path.join(base_dir, 'XML/BaseXML')
@@ -90,8 +105,10 @@ class CSJParser(object):
             list[numpy.ndarray]:
                 list of array whose shape is (number of labels,)
         """
-        X = []
-        Y = []
+        data_tr, labels_tr = [], []
+        data_dev1, labels_dev1 = [], []
+        data_dev2, labels_dev2 = [], []
+        data_dev3, labels_dev3 = [], []
         file_list_path = os.path.join(self.base_dir, 'fileList.csv')
         with open(file_list_path, encoding='shift_jis') as f:
             reader = csv.DictReader(f)
@@ -103,10 +120,24 @@ class CSJParser(object):
                 if csj_talk.is_core is False:
                     print('Skip {}'.format(csj_talk.id))
                     continue
-                x, y = self.parse_one(csj_talk, feature_params)
-                X.extend(x)
-                Y.extend(y)
-        return X, Y
+                data, labels = self.parse_one(csj_talk, feature_params)
+                if talk_id in self.talk_ids_for_devset_1:
+                    data_dev1.extend(data)
+                    labels_dev1.extend(labels)
+                elif talk_id in self.talk_ids_for_devset_2:
+                    data_dev2.extend(data)
+                    labels_dev2.extend(labels)
+                elif talk_id in self.talk_ids_for_devset_3:
+                    data_dev3.extend(data)
+                    labels_dev3.extend(labels)
+                else:
+                    data_tr.extend(data)
+                    labels_tr.extend(labels)
+        tr_set = (data_tr, labels_tr)
+        dev_set1 = (data_dev1, labels_dev1)
+        dev_set2 = (data_dev2, labels_dev2)
+        dev_set3 = (data_dev3, labels_dev3)
+        return tr_set, (dev_set1, dev_set2, dev_set3)
 
     def parse_one(self, csj_talk, feature_params):
         """Process one CSJ talk
@@ -219,19 +250,50 @@ class AudioDataset(torch.utils.data.Dataset):
         assert isinstance(self.labels[idx], torch.Tensor)
         return self.data[idx], self.labels[idx]
 
-    def save(self, path):
-        # NOTE: Save data and labels as numpy.ndarray
-        #       because saving them as torch.Tensor requires a lot of memory
-        obj = {'data': self.data, 'labels': self.labels}
-        with open(path, 'wb') as f:
-            pickle.dump(obj, f)
-
-    @staticmethod
-    def load(path):
-        with open(path, 'rb') as f:
-            obj = pickle.load(f)
-        return AudioDataset(obj['data'], obj['labels'])
-
     def to_torch(self):
         self.data = [torch.from_numpy(x) for x in self.data]
         self.labels = [torch.from_numpy(y) for y in self.labels]
+
+
+class DatasetRepository(metaclass=ABCMeta):
+
+    def __init__(self, path):
+        self.path = path
+
+    @abstractmethod
+    def save(self):
+        pass
+
+    @abstractmethod
+    def load(self):
+        pass
+
+
+class TrainingDatasetRepository(DatasetRepository):
+
+    def save(self, dataset):
+        # NOTE: Save data and labels as numpy.ndarray
+        #       because saving them as torch.Tensor requires a lot of memory
+        obj = {'data': dataset.data, 'labels': dataset.labels}
+        with open(self.path, 'wb') as f:
+            pickle.dump(obj, f)
+
+    def load(self):
+        with open(self.path, 'rb') as f:
+            obj = pickle.load(f)
+        return AudioDataset(obj['data'], obj['labels'])
+
+
+class DevelopmentDatasetRepository(DatasetRepository):
+
+    def save(self, datasets):
+        objs = []
+        for dataset in datasets:
+            objs.append({'data': dataset.data, 'labels': dataset.labels})
+        with open(self.path, 'wb') as f:
+            pickle.dump(objs, f)
+
+    def load(self):
+        with open(self.path, 'rb') as f:
+            objs = pickle.load(f)
+        return [AudioDataset(obj['data'], obj['labels']) for obj in objs]
