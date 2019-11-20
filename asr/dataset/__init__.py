@@ -1,10 +1,16 @@
 import glob
 import os
 import pickle
+from abc import ABCMeta, abstractmethod
 
 import torch
 
-from .csj import CSJParser  # noqa
+
+class DatasetParser(metaclass=ABCMeta):
+
+    @abstractmethod
+    def parse(self):
+        pass
 
 
 class AudioDataset(torch.utils.data.Dataset):

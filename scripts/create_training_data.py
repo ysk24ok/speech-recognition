@@ -2,10 +2,10 @@ import argparse
 
 from asr import phonemes, kana_phoneme_mapping
 from asr.dataset import (
-    CSJParser,
     TrainingDatasetRepository,
     DevelopmentDatasetRepository
 )
+from asr.dataset.csj import CSJParser
 from asr.decoder import Lexicon
 from asr.feature import FeatureParams
 

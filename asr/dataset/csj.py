@@ -4,6 +4,7 @@ import xml.dom.minidom
 
 import numpy
 
+from . import DatasetParser
 from ..feature import extract_feature_from_wavfile
 
 
@@ -68,7 +69,7 @@ class CSJTalk(object):
         self._xml_content = None
 
 
-class CSJParser(object):
+class CSJParser(DatasetParser):
 
     """
     Parameters:
