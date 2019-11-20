@@ -1,8 +1,8 @@
 import csv
+import glob
 import os
 import pickle
 import xml.dom.minidom
-from abc import ABCMeta, abstractmethod
 
 import numpy
 import torch
@@ -66,6 +66,11 @@ class CSJTalk(object):
         assert self._feature[channel] is not None
         return self._feature[channel]
 
+    def unref(self):
+        self._feature['L'] = None
+        self._feature['R'] = None
+        self._xml_content = None
+
 
 class CSJParser(object):
 
@@ -76,17 +81,19 @@ class CSJParser(object):
     """
 
     # See chapter 5 in https://pj.ninjal.ac.jp/corpus_center/csj/manu-f/asr.pdf
-    talk_ids_for_devset_1 = [
-        'A01M0097', 'A01M0110', 'A01M0137', 'A03M0106', 'A03M0112',
-        'A03M0156', 'A04M0051', 'A04M0121', 'A04M0123', 'A05M0011'
-    ]
-    talk_ids_for_devset_2 = [
-        'A01M0056', 'A01M0141', 'A02M0012', 'A03M0016', 'A06M0064',
-        'A01F0001', 'A01F0034', 'A01F0063', 'A03F0072', 'A06F0135'
-    ]
-    talk_ids_for_devset_3 = [
-        'S00M0008', 'S00M0070', 'S00M0079', 'S00M0112', 'S00M0213',
-        'S00F0019', 'S00F0066', 'S00F0148', 'S00F0152', 'S01F0105'
+    talk_ids_for_dev_sets = [
+        [
+            'A01M0097', 'A01M0110', 'A01M0137', 'A03M0106', 'A03M0112',
+            'A03M0156', 'A04M0051', 'A04M0121', 'A04M0123', 'A05M0011'
+        ],
+        [
+            'A01M0056', 'A01M0141', 'A02M0012', 'A03M0016', 'A06M0064',
+            'A01F0001', 'A01F0034', 'A01F0063', 'A03F0072', 'A06F0135'
+        ],
+        [
+            'S00M0008', 'S00M0070', 'S00M0079', 'S00M0112', 'S00M0213',
+            'S00F0019', 'S00F0066', 'S00F0148', 'S00F0152', 'S01F0105'
+        ]
     ]
 
     def __init__(self, base_dir, lexicon):
@@ -95,21 +102,18 @@ class CSJParser(object):
         self.wav_dir = os.path.join(base_dir, 'WAV')
         self.lexicon = lexicon
 
-    def parse(self, feature_params):
+    def get_talks(self, training_data_file_count):
         """
-        Args
-            feature_params (asr.feature.FeatureParams): FeatureParams object
+        Args:
+            training_data_file_count (int): Training file counts to be saved
         Returns:
-            list[numpy.ndarray]:
-                list of array whose shape is (number of frames, feature size)
-            list[numpy.ndarray]:
-                list of array whose shape is (number of labels,)
+            list[list[asr.dataset.CSJTalk]]: training sets
+            list[list[asr.dataset.CSJTalk]]: development sets
         """
-        data_tr, labels_tr = [], []
-        data_dev1, labels_dev1 = [], []
-        data_dev2, labels_dev2 = [], []
-        data_dev3, labels_dev3 = [], []
         file_list_path = os.path.join(self.base_dir, 'fileList.csv')
+        tr_talks = [[] for _ in range(training_data_file_count)]
+        dev_talks = [[] for _ in range(len(self.talk_ids_for_dev_sets))]
+        file_count = 0
         with open(file_list_path, encoding='shift_jis') as f:
             reader = csv.DictReader(f)
             for row in reader:
@@ -117,27 +121,45 @@ class CSJParser(object):
                 talk_category = row['講演種別']
                 core_or_noncore = row['コア']
                 csj_talk = CSJTalk(talk_id, talk_category, core_or_noncore)
-                if csj_talk.is_core is False:
-                    print('Skip {}'.format(csj_talk.id))
-                    continue
-                data, labels = self.parse_one(csj_talk, feature_params)
-                if talk_id in self.talk_ids_for_devset_1:
-                    data_dev1.extend(data)
-                    labels_dev1.extend(labels)
-                elif talk_id in self.talk_ids_for_devset_2:
-                    data_dev2.extend(data)
-                    labels_dev2.extend(labels)
-                elif talk_id in self.talk_ids_for_devset_3:
-                    data_dev3.extend(data)
-                    labels_dev3.extend(labels)
-                else:
-                    data_tr.extend(data)
-                    labels_tr.extend(labels)
-        tr_set = (data_tr, labels_tr)
-        dev_set1 = (data_dev1, labels_dev1)
-        dev_set2 = (data_dev2, labels_dev2)
-        dev_set3 = (data_dev3, labels_dev3)
-        return tr_set, (dev_set1, dev_set2, dev_set3)
+                # dev set
+                dev_set_id = self._get_dev_set_id(talk_id)
+                if dev_set_id is not None:
+                    dev_talks[dev_set_id].append(csj_talk)
+                # tr set
+                idx = file_count % training_data_file_count
+                tr_talks[idx].append(csj_talk)
+                file_count += 1
+        return tr_talks, dev_talks
+
+    def _get_dev_set_id(self, talk_id):
+        for i, talk_ids in enumerate(self.talk_ids_for_dev_sets):
+            if talk_id in talk_ids:
+                return i
+        # This talk_id is for training set
+        return None
+
+    def parse(self, csj_talks, feature_params, only_core=False):
+        """
+        Args
+            csj_talks (list[asr.dataset.CSJTalk]): CSJTalk objects
+            feature_params (asr.feature.FeatureParams): FeatureParams object
+            only_core (bool): A flag which indicates parsing only core files
+        Returns:
+            list[numpy.ndarray]:
+                list of array whose shape is (number of frames, feature size)
+            list[numpy.ndarray]:
+                list of array whose shape is (number of labels,)
+        """
+        data, labels = [], []
+        for csj_talk in csj_talks:
+            if only_core is True and csj_talk.is_core is False:
+                print('Skip noncore {}'.format(csj_talk.id))
+                continue
+            d, label = self.parse_one(csj_talk, feature_params)
+            csj_talk.unref()
+            data.extend(d)
+            labels.extend(label)
+        return data, labels
 
     def parse_one(self, csj_talk, feature_params):
         """Process one CSJ talk
@@ -153,7 +175,7 @@ class CSJParser(object):
         print('Process {} ...'.format(csj_talk.id))
         csj_talk.extract_feature(self.wav_dir, feature_params)
         csj_talk.load_xml(self.xml_dir)
-        X = []
+        data = []
         labels = []
         for ipu in csj_talk.get_xml().getElementsByTagName('IPU'):
             ipu_id = ipu.getAttribute('IPUID')
@@ -162,10 +184,10 @@ class CSJParser(object):
                 print('Skip IPU because label length is 0: IPUID={}'.format(
                     ipu_id))
                 continue
-            data = self.create_data(ipu, csj_talk, feature_params.hop_length)
-            X.append(data)
+            d = self.create_data(ipu, csj_talk, feature_params.hop_length)
+            data.append(d)
             labels.append(label)
-        return X, labels
+        return data, labels
 
     def create_data(self, ipu, csj_talk, hop_length_in_sec):
         """Create feature matrix for one IPU
@@ -237,6 +259,10 @@ class CSJParser(object):
 
 class AudioDataset(torch.utils.data.Dataset):
 
+    """Subclass of torch.utils.data.Dataset.
+    This class is suitable for data which is small enough to fit in memory.
+    """
+
     def __init__(self, data, labels):
         assert len(data) == len(labels)
         self.data = data
@@ -250,50 +276,116 @@ class AudioDataset(torch.utils.data.Dataset):
         assert isinstance(self.labels[idx], torch.Tensor)
         return self.data[idx], self.labels[idx]
 
-    def to_torch(self):
-        self.data = [torch.from_numpy(x) for x in self.data]
-        self.labels = [torch.from_numpy(y) for y in self.labels]
+    @staticmethod
+    def load_all(repository):
+        """Load all files from the repository as list of AudioDataset objects.
+        The length of the list is equal to the number of files saved on disk.
+
+        Args:
+            repository (asr.dataset.DatasetRepository):
+                DatasetRepository object
+        Returns:
+            list[asr.dataset.AudioDataset]: AudioDataset objects
+        """
+        return [AudioDataset(d, l) for d, l in repository.load_next()]
+
+    @staticmethod
+    def load_concat(repository):
+        """Load all files from the repository into one AudioDataset object.
+
+        Args:
+            repository (asr.dataset.DatasetRepository):
+                DatasetRepository object
+        Returns:
+            asr.dataset.AudioDataset: AudioDataset object
+        """
+        data, labels = [], []
+        for d, label in repository.load_next():
+            data.extend(d)
+            labels.extend(label)
+        return AudioDataset(data, labels)
 
 
-class DatasetRepository(metaclass=ABCMeta):
+class IterableAudioDataset(torch.utils.data.IterableDataset):
 
-    def __init__(self, path):
-        self.path = path
+    """Subclass of torch.utils.data.IterableDataset.
+    This class is suitable for data which is so big that cannot fit in memory.
+    """
 
-    @abstractmethod
-    def save(self):
-        pass
+    def __init__(self, repository):
+        self.repository = repository
 
-    @abstractmethod
-    def load(self):
-        pass
+    def __iter__(self):
+        for data, labels in self.repository.load_next():
+            for d, label in zip(data, labels):
+                yield d, label
+
+
+def _generate_idx(start=0):
+    idx = start
+    while True:
+        yield idx
+        idx += 1
+
+
+class DatasetRepository(object):
+
+    def __init__(self, dirpath):
+        self.dirpath = dirpath
+        self._idx_generator = _generate_idx()
+
+    def save(self, data, labels):
+        """Save data and labels as one file with a specified prefix.
+
+        Args:
+            data (list[numpy.ndarray]):
+                list of array whose shape is (number of frames, feature size)
+            labels (list[numpy.ndarray]):
+                list of array whose shape is (number of labels,)
+        """
+        # NOTE: Save data and labels as numpy.ndarray
+        #       because saving them as torch.Tensor requires a lot of memory
+        filename_suffix = next(self._idx_generator)
+        fname = '{}{:0>3}.pkl'.format(self.filename_prefix, filename_suffix)
+        fpath = os.path.join(self.dirpath, fname)
+        with open(fpath, 'wb') as f:
+            obj = {'data': data, 'labels': labels}
+            pickle.dump(obj, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+    def load_next(self):
+        """Load one file with a specified prefix as torch.Tensor
+
+        Returns:
+            generator: generator object
+        """
+        for fpath in self._get_filepaths():
+            yield self._load_one(fpath)
+
+    def _get_filepaths(self):
+        fname = '{}*.pkl'.format(self.filename_prefix)
+        return glob.glob(os.path.join(self.dirpath, fname))
+
+    def _load_one(self, filepath):
+        with open(filepath, 'rb') as f:
+            obj = pickle.load(f)
+        return self._to_torch(obj['data'], obj['labels'])
+
+    def _to_torch(self, data, labels):
+        return (
+            [torch.from_numpy(d) for d in data],
+            [torch.from_numpy(l) for l in labels]
+        )
 
 
 class TrainingDatasetRepository(DatasetRepository):
 
-    def save(self, dataset):
-        # NOTE: Save data and labels as numpy.ndarray
-        #       because saving them as torch.Tensor requires a lot of memory
-        obj = {'data': dataset.data, 'labels': dataset.labels}
-        with open(self.path, 'wb') as f:
-            pickle.dump(obj, f)
-
-    def load(self):
-        with open(self.path, 'rb') as f:
-            obj = pickle.load(f)
-        return AudioDataset(obj['data'], obj['labels'])
+    def __init__(self, dirpath):
+        super(TrainingDatasetRepository, self).__init__(dirpath)
+        self.filename_prefix = 'tr'
 
 
 class DevelopmentDatasetRepository(DatasetRepository):
 
-    def save(self, datasets):
-        objs = []
-        for dataset in datasets:
-            objs.append({'data': dataset.data, 'labels': dataset.labels})
-        with open(self.path, 'wb') as f:
-            pickle.dump(objs, f)
-
-    def load(self):
-        with open(self.path, 'rb') as f:
-            objs = pickle.load(f)
-        return [AudioDataset(obj['data'], obj['labels']) for obj in objs]
+    def __init__(self, dirpath):
+        super(DevelopmentDatasetRepository, self).__init__(dirpath)
+        self.filename_prefix = 'dev'

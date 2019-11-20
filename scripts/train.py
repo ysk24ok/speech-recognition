@@ -6,6 +6,8 @@ from torch.utils.data import DataLoader
 from asr import acoustic_model
 from asr import phonemes
 from asr.dataset import (
+    AudioDataset,
+    IterableAudioDataset,
     TrainingDatasetRepository,
     DevelopmentDatasetRepository
 )
@@ -19,12 +21,10 @@ parser.add_argument('--model-type', type=str, default='eesen',
 parser.add_argument('--feature-params-path', type=str,
                     default='feature_params.json',
                     help='Feature params path to load')
-parser.add_argument('--training-data-path', type=str,
-                    default='training_data.bin',
-                    help='Training data path to load')
-parser.add_argument('--development-data-path', type=str,
-                    default='development_data.bin',
-                    help='Development data path to load')
+parser.add_argument('--training-data-dirpath', type=str, default='trdir',
+                    help='Directory path where training data are saved')
+parser.add_argument('--development-data-dirpath', type=str, default='devdir',
+                    help='Directory path where development data are saved')
 parser.add_argument('--hidden-size', type=int, default=256,
                     help='hidden layer size of an acoustic model')
 parser.add_argument('--num-layers', type=int, default=4,
@@ -41,17 +41,16 @@ parser.add_argument('--model-path', type=str, default="model.bin",
 args = parser.parse_args()
 
 print('Loading training data ...')
-dataset_tr = TrainingDatasetRepository(args.training_data_path).load()
-dataset_tr.to_torch()
-dataloader_tr = DataLoader(dataset_tr, batch_size=args.batch_size,
-                           collate_fn=collate_for_ctc)
+repository_tr = TrainingDatasetRepository(args.training_data_dirpath)
+dataset_tr = IterableAudioDataset(repository_tr)
+dataloader_tr = DataLoader(
+    dataset_tr, batch_size=args.batch_size, collate_fn=collate_for_ctc)
 print('Loading development data ...')
+repository_dev = DevelopmentDatasetRepository(args.development_data_dirpath)
 dataloaders_dev = []
-datasets_dev = DevelopmentDatasetRepository(args.development_data_path).load()
-for dataset_dev in datasets_dev:
-    dataset_dev.to_torch()
-    dataloader_dev = DataLoader(dataset_dev, batch_size=args.batch_size,
-                                collate_fn=collate_for_ctc)
+for dataset_dev in AudioDataset.load_all(repository_dev):
+    dataloader_dev = DataLoader(
+        dataset_dev, batch_size=args.batch_size, collate_fn=collate_for_ctc)
     dataloaders_dev.append(dataloader_dev)
 print('Training ...')
 num_labels = len(phonemes)

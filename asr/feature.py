@@ -5,6 +5,9 @@ import numpy
 import scipy
 
 
+eps = numpy.finfo(numpy.float32).eps
+
+
 # TODO: Use Data Class instead of namedtuple, but it requires python >= 3.7
 class FeatureParams(object):
 
@@ -66,7 +69,8 @@ def log_mel_spectrum(samples, sampling_rate, fft_size=2048,
         n_fft=fft_size,
         n_mels=filter_bank
     )
-    return numpy.log(mel_filter_bank @ power_spectrum).T
+    # Add epsilon to prevent division by zero in numpy.log
+    return numpy.log(mel_filter_bank @ power_spectrum + eps).T
 
 
 def extract_feature_from_wavfile(wav_filepath, feature_params,
