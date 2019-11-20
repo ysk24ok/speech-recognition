@@ -156,12 +156,6 @@ class EESENAcousticModel(AcousticModel):
                 losses_dev.append(loss_dev)
             progress_table.print_row(
                 epoch, time.time() - start_time, loss_tr, *losses_dev)
-            """
-            print('| epoch {:3d} | {:5.2f} sec | total loss {:5.2f} '
-                    '| dev1 loss {:5.2f} | dev2 loss {:5.2f} | dev3 loss {:5.2f} |'.format(
-                epoch, time.time() - start_time, loss_tr,
-                losses_dev[0], losses_dev[1], losses_dev[2]))
-            """
             self.save('./tmp/eesen_model_epoch_{}.bin'.format(epoch))
             start_time = time.time()
 
