@@ -1,8 +1,5 @@
 # list of phonemes used in kana_phoneme_mapping
 phonemes = [
-    '<blank>',
-    '<unk>',
-    '<epsilon>',
     'a',
     'i',
     'u',
@@ -41,7 +38,7 @@ phonemes = [
 ]
 
 # https://pj.ninjal.ac.jp/corpus_center/csj/manu-f/asr.pdf
-kana_phoneme_mapping = {
+kana2phonemes = {
     'ア': 'a',
     'イ': 'i',
     'ウ': 'u',

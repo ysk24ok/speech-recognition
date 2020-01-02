@@ -83,10 +83,10 @@ class EESENModule(torch.nn.Module):
 class EESENAcousticModel(AcousticModel):
 
     def __init__(self, input_size, hidden_size, num_layers, num_labels,
-                 device=torch.device('cpu')):
+                 device=torch.device('cpu'), blank=0):
         self.module = EESENModule(
             input_size, hidden_size, num_layers, num_labels).to(device)
-        self.ctc_loss = torch.nn.CTCLoss().to(device)
+        self.ctc_loss = torch.nn.CTCLoss(blank=blank).to(device)
         self.optimizer = None
         self.optimizer_type = None
         self.device = device

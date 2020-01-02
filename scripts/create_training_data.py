@@ -1,12 +1,13 @@
 import argparse
 
-from asr import phonemes, kana_phoneme_mapping
+from asr import phonemes, kana2phonemes
+from asr.acoustic_labels import MonophoneLabels
 from asr.dataset import (
     TrainingDatasetRepository,
     DevelopmentDatasetRepository
 )
 from asr.dataset.csj import CSJParser
-from asr.decoder import Lexicon
+from asr.decoder import Corpus, Lexicon
 from asr.feature import FeatureParams
 
 
@@ -18,10 +19,10 @@ def extract_feature(csj_parser, talk_sets, repository, feature_params):
     for i, talks in enumerate(talk_sets):
         print('Extracting features of {}/{} of {} data'.format(
             i + 1, len(talk_sets), tr_or_dev))
-        data, labels = csj_parser.parse(talks, feature_params)
+        data, targets = csj_parser.parse(talks, feature_params)
         print('Saving {}/{} of {} data ...'.format(
             i + 1, len(talk_sets), tr_or_dev))
-        repository.save(data, labels)
+        repository.save(data, targets)
 
 
 parser = argparse.ArgumentParser()
@@ -39,6 +40,10 @@ parser.add_argument('--training-data-dirpath', type=str, default='trdir',
                     help='Directory path where training data are saved')
 parser.add_argument('--development-data-dirpath', type=str, default='devdir',
                     help='Directory path where development data are saved')
+parser.add_argument('--corpus-path', type=str, default='corpus.txt',
+                    help='File path where corpus is saved')
+parser.add_argument('--lexicon-path', type=str, default='lexicon.txt',
+                    help='File path where lexicon is saved')
 parser.add_argument('--training-data-file-count', type=int,
                     default=4, help='Training data file count to save')
 parser.add_argument('--dataset-type', type=str, default='csj',
@@ -55,9 +60,11 @@ feature_params = FeatureParams(
 )
 repository_tr = TrainingDatasetRepository(args.training_data_dirpath)
 repository_dev = DevelopmentDatasetRepository(args.development_data_dirpath)
-lexicon = Lexicon(phonemes, kana_phoneme_mapping)
+corpus = Corpus()
+acoustic_labels = MonophoneLabels(phonemes, kana2phonemes)
+lexicon = Lexicon(acoustic_labels)
 if args.dataset_type == 'csj':
-    csj_parser = CSJParser(args.path, lexicon)
+    csj_parser = CSJParser(args.path, corpus, lexicon)
     talk_sets_tr, talk_sets_dev = csj_parser.get_talks(
         args.training_data_file_count)
     extract_feature(csj_parser, talk_sets_tr, repository_tr, feature_params)
@@ -66,3 +73,5 @@ else:
     raise ValueError('dataset_type: {} is not supported'.format(
         args.dataset_type))
 feature_params.save(args.feature_params_path)
+corpus.save(args.corpus_path)
+lexicon.save(args.lexicon_path)

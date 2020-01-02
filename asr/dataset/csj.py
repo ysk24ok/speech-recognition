@@ -74,6 +74,7 @@ class CSJParser(DatasetParser):
     """
     Parameters:
         base_dir (str): root path of CSJ dataset
+        corpus (asr.decoder.Corpus): Corpus object
         lexicon (asr.decoder.Lexicon): Lexicon object
     """
 
@@ -93,10 +94,11 @@ class CSJParser(DatasetParser):
         ]
     ]
 
-    def __init__(self, base_dir, lexicon):
+    def __init__(self, base_dir, corpus, lexicon):
         self.base_dir = base_dir
         self.xml_dir = os.path.join(base_dir, 'XML/BaseXML')
         self.wav_dir = os.path.join(base_dir, 'WAV')
+        self.corpus = corpus
         self.lexicon = lexicon
 
     def get_talks(self, training_data_file_count):
@@ -228,7 +230,11 @@ class CSJParser(DatasetParser):
                         'IPUID={}, LUWID={}, SUWID={}'.format(
                             ipu_id, luw_id, suw_id))
                     continue
-                reading = []
+                end_of_sentence = False
+                if suw.getAttribute('ClauseBoundaryLabel') == '[文末]':
+                    end_of_sentence = True
+                self.corpus.add(word, end_of_sentence=end_of_sentence)
+                moras = []
                 for mora in suw.getElementsByTagName('Mora'):
                     mora_id = mora.getAttribute('MoraID')
                     kana = mora.getAttribute('MoraEntity')
@@ -237,9 +243,9 @@ class CSJParser(DatasetParser):
                               'IPUID={}, LUWID={}, SUWID={}, MoraID={}'.format(
                                 kana, ipu_id, luw_id, suw_id, mora_id))
                         continue
-                    reading.append(kana)
-                self.lexicon.add(word, reading)
-                labels.extend(self.lexicon.get(word))
+                    moras.append(kana)
+                self.lexicon.add(word, moras)
+                labels.extend(self.lexicon.get_label_ids(moras))
         return numpy.array(labels, dtype=numpy.int32)
 
     def is_masked(self, suw):
