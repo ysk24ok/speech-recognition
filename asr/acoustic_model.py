@@ -108,8 +108,7 @@ class EESENAcousticModel(AcousticModel):
             output = self.module(data)
             return output.argmax(axis=2)
 
-    def train(self, dataloader_tr, dataloaders_dev, epochs,
-              save_per_epoch=False):
+    def train(self, dataloader_tr, dataloaders_dev, epochs):
         """
         Args:
             dataloader_tr (torch.utils.data.dataloader.DataLoader):
@@ -117,7 +116,6 @@ class EESENAcousticModel(AcousticModel):
             dataloaders_dev (list[torch.utils.data.dataloader.DataLoader]):
                 Dataloader objects to be used for development
             epochs (int): number of epochs
-            save_per_epoch (bool): a flag to save the model per epoch
         """
         if self.optimizer is None:
             msg = 'Optimizer is not set. Call set_optimizer method first.'
@@ -156,7 +154,6 @@ class EESENAcousticModel(AcousticModel):
                 losses_dev.append(loss_dev)
             progress_table.print_row(
                 epoch, time.time() - start_time, loss_tr, *losses_dev)
-            self.save('./tmp/eesen_model_epoch_{}.bin'.format(epoch))
             start_time = time.time()
 
     def save(self, path):
