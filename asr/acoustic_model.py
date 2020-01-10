@@ -36,16 +36,17 @@ class AcousticModel(metaclass=ABCMeta):
         pass
 
     @staticmethod
-    def load(path):
+    def load(path, blank=0):
         """Load model
         Args:
             path (str): Path to load
+            blank (int): Blank id
         Returns:
             instance of AcousticModel
         """
         data = torch.load(path)
         if data['model_type'] == 'eesen':
-            model = EESENAcousticModel(**data['meta'])
+            model = EESENAcousticModel(**data['meta'], blank=blank)
         else:
             raise ValueError('model_type: {} is not supported.')
         model.module.load_state_dict(data['module']['state_dict'])
@@ -93,6 +94,7 @@ class EESENAcousticModel(AcousticModel):
 
     def to(self, device):
         self.module = self.module.to(device)
+        self.ctc_loss = self.ctc_loss.to(device)
         self.device = device
 
     def predict(self, data):

@@ -39,6 +39,7 @@ parser.add_argument('--batch-size', type=int, default=32, help='batch size')
 parser.add_argument('--device', type=str, default='cpu', help='Device string')
 parser.add_argument('--model-path', type=str, default="model.bin",
                     help='Model path to save')
+parser.add_argument('--resume', action='store_true')
 args = parser.parse_args()
 
 print('Loading training data ...')
@@ -53,19 +54,26 @@ for dataset_dev in AudioDataset.load_all(repository_dev):
     dataloader_dev = DataLoader(
         dataset_dev, batch_size=args.batch_size, collate_fn=collate_for_ctc)
     dataloaders_dev.append(dataloader_dev)
-print('Training ...')
 acoustic_labels = MonophoneLabels(phonemes, kana2phonemes)
 num_labels = len(acoustic_labels.get_all_labels())
 feature_params = FeatureParams.load(args.feature_params_path)
+blank_id = acoustic_labels.get_blank_id()
 device = torch.device(args.device)
-if args.model_type == 'eesen':
-    model = acoustic_model.EESENAcousticModel(
-        feature_params.feature_size, args.hidden_size, args.num_layers,
-        num_labels, device, blank=acoustic_labels.get_blank_id())
+if args.resume is True:
+    print('Loading model ...')
+    model = acoustic_model.AcousticModel.load(args.model_path, blank=blank_id)
+    model.to(device)
 else:
-    raise ValueError('model_type: {} is not supported.'.format(
-        args.model_type))
+    print('Initializing model ...')
+    if args.model_type == 'eesen':
+        model = acoustic_model.EESENAcousticModel(
+            feature_params.feature_size, args.hidden_size, args.num_layers,
+            num_labels, device, blank=blank_id)
+    else:
+        raise ValueError('model_type: {} is not supported.'.format(
+            args.model_type))
 model.set_optimizer(args.optimizer, args.lr)
+print('Training ...')
 model.train(dataloader_tr, dataloaders_dev, args.epochs)
 print('Saving model ...')
 model.save(args.model_path)

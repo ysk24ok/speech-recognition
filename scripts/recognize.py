@@ -26,8 +26,9 @@ parser.add_argument('--decoder-fst-file', type=str, default='decoder.fst',
 args = parser.parse_args()
 
 print('Loading model ...')
+acoustic_labels = MonophoneLabels(phonemes, kana2phonemes)
 model_path = os.path.join(args.workdir, args.model_file)
-model = AcousticModel.load(model_path)
+model = AcousticModel.load(model_path, blank=acoustic_labels.get_blank_id())
 print('Predicting acoustic labels ...')
 feature_params_path = os.path.join(args.workdir, args.feature_params_file)
 feature_params = FeatureParams.load(feature_params_path)
@@ -37,7 +38,6 @@ for wav_file in args.wav_files:
     batch.append(torch.from_numpy(data))
 output = model.predict(pad_sequence(batch))
 frame_labels = [int(frame_label) for frame_label in output[:, 0]]
-acoustic_labels = MonophoneLabels(phonemes, kana2phonemes)
 print(' '.join(
     [acoustic_labels.get_label(frame_label) for frame_label in frame_labels
      if frame_label != acoustic_labels.get_blank_id()]
