@@ -27,9 +27,9 @@ args = parser.parse_args()
 
 print('Loading model ...')
 acoustic_labels = MonophoneLabels(phonemes, kana2phonemes)
+epsilon_id = acoustic_labels.get_epsilon_id()
 model_path = os.path.join(args.workdir, args.model_file)
 model = AcousticModel.load(model_path, blank=acoustic_labels.get_blank_id())
-print('Predicting acoustic labels ...')
 feature_params_path = os.path.join(args.workdir, args.feature_params_file)
 feature_params = FeatureParams.load(feature_params_path)
 batch = []
@@ -37,18 +37,19 @@ for wav_file in args.wav_files:
     data = extract_feature_from_wavfile(wav_file, feature_params)
     batch.append(torch.from_numpy(data))
 output = model.predict(pad_sequence(batch))
-frame_labels = [int(frame_label) for frame_label in output[:, 0]]
-print(' '.join(
-    [acoustic_labels.get_label(frame_label) for frame_label in frame_labels
-     if frame_label != acoustic_labels.get_blank_id()]
-))
-print('Decoding ...')
-vocabulary_symbol_path = os.path.join(
-    args.workdir, args.vocabulary_symbol_file)
-vocab_symbol = VocabularySymbol()
-vocab_symbol.read(vocabulary_symbol_path)
-decoder_fst_path = os.path.join(args.workdir, args.decoder_fst_file)
-wfst_decoder = WFSTDecoder()
-wfst_decoder.read_fst(decoder_fst_path)
-print(wfst_decoder.decode(frame_labels, vocab_symbol,
-                          epsilon_id=acoustic_labels.get_epsilon_id()))
+for idx, wav_file in enumerate(args.wav_files):
+    print('Decoding {} ... '.format(wav_file))
+    frame_labels = [int(frame_label) for frame_label in output[:, idx]]
+    print('  acoustic labels = {}'.format(' '.join(
+        [acoustic_labels.get_label(frame_label) for frame_label in frame_labels
+         if frame_label != acoustic_labels.get_blank_id()]))
+    )
+    vocabulary_symbol_path = os.path.join(
+        args.workdir, args.vocabulary_symbol_file)
+    vocab_symbol = VocabularySymbol()
+    vocab_symbol.read(vocabulary_symbol_path)
+    decoder_fst_path = os.path.join(args.workdir, args.decoder_fst_file)
+    wfst_decoder = WFSTDecoder()
+    wfst_decoder.read_fst(decoder_fst_path)
+    print('  text = {} '.format(wfst_decoder.decode(
+        frame_labels, vocab_symbol, epsilon_id=epsilon_id)))
