@@ -325,7 +325,7 @@ class Grammar(object):
         )
         p4.wait()
         os.chdir(cwd)
-        return pywrapfst.Fst.read(path).arcsort()
+        return pywrapfst.Fst.read(path)
 
 
 class WFSTDecoder(object):
@@ -348,9 +348,9 @@ class WFSTDecoder(object):
             grammar_fst (pywrapfst._MutableFst): A grammar FST
         """
         LG = pywrapfst.determinize(
-            pywrapfst.compose(lexicon_fst, grammar_fst).rmepsilon()
-        ).minimize().arcsort()
-        self._fst = pywrapfst.compose(token_fst, LG)
+            pywrapfst.compose(lexicon_fst, grammar_fst.arcsort()).rmepsilon()
+        ).minimize()
+        self._fst = pywrapfst.compose(token_fst, LG.arcsort())
 
     def read_fst(self, path):
         """Read a FST from disk
