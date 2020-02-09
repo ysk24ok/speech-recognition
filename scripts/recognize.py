@@ -3,11 +3,11 @@ import os
 
 import torch
 
-from asr import phonemes, kana2phonemes
-from asr.acoustic_labels import MonophoneLabels
+from asr import phonemes
 from asr.acoustic_model import AcousticModel
-from asr.decoder import WFSTDecoder, VocabularySymbol
+from asr.decoder import WFSTDecoder
 from asr.feature import extract_feature_from_wavfile, FeatureParams
+from asr.label_table import PhonemeTable, VocabularySymbolTable
 from asr.utils import pad_sequence
 
 
@@ -25,11 +25,12 @@ parser.add_argument('--decoder-fst-file', type=str, default='decoder.fst',
                     help='Decoder FST file name')
 args = parser.parse_args()
 
+phoneme_table = PhonemeTable()
+phoneme_table.add_labels(phonemes)
+epsilon_id = phoneme_table.get_epsilon_id()
 print('Loading model ...')
-acoustic_labels = MonophoneLabels(phonemes, kana2phonemes)
-epsilon_id = acoustic_labels.get_epsilon_id()
 model_path = os.path.join(args.workdir, args.model_file)
-model = AcousticModel.load(model_path, blank=acoustic_labels.get_blank_id())
+model = AcousticModel.load(model_path, blank=phoneme_table.get_blank_id())
 feature_params_path = os.path.join(args.workdir, args.feature_params_file)
 feature_params = FeatureParams.load(feature_params_path)
 batch = []
@@ -41,13 +42,13 @@ for idx, wav_file in enumerate(args.wav_files):
     print('Decoding {} ... '.format(wav_file))
     frame_labels = [int(frame_label) for frame_label in output[:, idx]]
     print('  acoustic labels = {}'.format(' '.join(
-        [acoustic_labels.get_label(frame_label) for frame_label in frame_labels
-         if frame_label != acoustic_labels.get_blank_id()]))
+        [phoneme_table.get_label(frame_label) for frame_label in frame_labels
+         if frame_label != phoneme_table.get_blank_id()]))
     )
     vocabulary_symbol_path = os.path.join(
         args.workdir, args.vocabulary_symbol_file)
-    vocab_symbol = VocabularySymbol()
-    vocab_symbol.read(vocabulary_symbol_path)
+    vocab_symbol = VocabularySymbolTable.load_symbol(
+        vocabulary_symbol_path)
     decoder_fst_path = os.path.join(args.workdir, args.decoder_fst_file)
     wfst_decoder = WFSTDecoder()
     wfst_decoder.read_fst(decoder_fst_path)

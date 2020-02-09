@@ -33,30 +33,33 @@ class AudioDataset(torch.utils.data.Dataset):
         return self.data[idx], self.labels[idx]
 
     @staticmethod
-    def load_all(repository):
+    def load_all(repository, label_table):
         """Load all files from the repository as list of AudioDataset objects.
         The length of the list is equal to the number of files saved on disk.
 
         Args:
             repository (asr.dataset.DatasetRepository):
                 DatasetRepository object
+            label_table (asr.label_table.LabelTable): LabelTable object
         Returns:
             list[asr.dataset.AudioDataset]: AudioDataset objects
         """
-        return [AudioDataset(d, l) for d, l in repository.load_next()]
+        return [AudioDataset(data, labels)
+                for data, labels in repository.load_next(label_table)]
 
     @staticmethod
-    def load_concat(repository):
+    def load_concat(repository, label_table):
         """Load all files from the repository into one AudioDataset object.
 
         Args:
             repository (asr.dataset.DatasetRepository):
                 DatasetRepository object
+            label_table (asr.label_table.LabelTable): LabelTable object
         Returns:
             asr.dataset.AudioDataset: AudioDataset object
         """
         data, labels = [], []
-        for d, label in repository.load_next():
+        for d, label in repository.load_next(label_table):
             data.extend(d)
             labels.extend(label)
         return AudioDataset(data, labels)
@@ -68,11 +71,12 @@ class IterableAudioDataset(torch.utils.data.IterableDataset):
     This class is suitable for data which is so big that cannot fit in memory.
     """
 
-    def __init__(self, repository):
+    def __init__(self, repository, label_table):
         self.repository = repository
+        self.label_table = label_table
 
     def __iter__(self):
-        for data, labels in self.repository.load_next():
+        for data, labels in self.repository.load_next(self.label_table):
             for d, label in zip(data, labels):
                 yield d, label
 
@@ -96,7 +100,7 @@ class DatasetRepository(object):
         Args:
             data (list[numpy.ndarray]):
                 list of array whose shape is (number of frames, feature size)
-            labels (list[numpy.ndarray]):
+            labels (list[list[str]]):
                 list of array whose shape is (number of labels,)
         """
         # NOTE: Save data and labels as numpy.ndarray
@@ -108,28 +112,40 @@ class DatasetRepository(object):
             obj = {'data': data, 'labels': labels}
             pickle.dump(obj, f, protocol=pickle.HIGHEST_PROTOCOL)
 
-    def load_next(self):
+    def load_next(self, label_table):
         """Load one file with a specified prefix as torch.Tensor
 
         Returns:
             generator: generator object
         """
         for fpath in self._get_filepaths():
-            yield self._load_one(fpath)
+            yield self._load_one(fpath, label_table)
 
     def _get_filepaths(self):
         fname = '{}*.pkl'.format(self.filename_prefix)
         return glob.glob(os.path.join(self.dirpath, fname))
 
-    def _load_one(self, filepath):
+    def _load_one(self, filepath, label_table):
         with open(filepath, 'rb') as f:
             obj = pickle.load(f)
-        return self._to_torch(obj['data'], obj['labels'])
+        return self._to_torch(
+            obj['data'],
+            self._convert_label_to_id(obj['labels'], label_table)
+        )
+
+    def _convert_label_to_id(self, list_of_labels, label_table):
+        list_of_label_ids = []
+        for labels in list_of_labels:
+            label_ids = []
+            for label in labels:
+                label_ids.append(label_table.get_label_id(label))
+            list_of_label_ids.append(label_ids)
+        return list_of_label_ids
 
     def _to_torch(self, data, labels):
         return (
             [torch.from_numpy(d) for d in data],
-            [torch.from_numpy(l) for l in labels]
+            [torch.Tensor(l).long() for l in labels]
         )
 
 

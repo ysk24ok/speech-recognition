@@ -4,8 +4,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from asr import acoustic_model
-from asr.acoustic_labels import MonophoneLabels
-from asr import phonemes, kana2phonemes
+from asr import phonemes
 from asr.dataset import (
     AudioDataset,
     IterableAudioDataset,
@@ -13,6 +12,7 @@ from asr.dataset import (
     DevelopmentDatasetRepository
 )
 from asr.feature import FeatureParams
+from asr.label_table import PhonemeTable
 from asr.utils import collate_for_ctc
 
 
@@ -42,22 +42,22 @@ parser.add_argument('--model-path', type=str, default="model.bin",
 parser.add_argument('--resume', action='store_true')
 args = parser.parse_args()
 
+phoneme_table = PhonemeTable()
+phoneme_table.add_labels(phonemes)
 print('Loading training data ...')
 repository_tr = TrainingDatasetRepository(args.training_data_dirpath)
-dataset_tr = IterableAudioDataset(repository_tr)
+dataset_tr = IterableAudioDataset(repository_tr, phoneme_table)
 dataloader_tr = DataLoader(
     dataset_tr, batch_size=args.batch_size, collate_fn=collate_for_ctc)
 print('Loading development data ...')
 repository_dev = DevelopmentDatasetRepository(args.development_data_dirpath)
 dataloaders_dev = []
-for dataset_dev in AudioDataset.load_all(repository_dev):
+for dataset_dev in AudioDataset.load_all(repository_dev, phoneme_table):
     dataloader_dev = DataLoader(
         dataset_dev, batch_size=args.batch_size, collate_fn=collate_for_ctc)
     dataloaders_dev.append(dataloader_dev)
-acoustic_labels = MonophoneLabels(phonemes, kana2phonemes)
-num_labels = len(acoustic_labels.get_all_labels())
 feature_params = FeatureParams.load(args.feature_params_path)
-blank_id = acoustic_labels.get_blank_id()
+blank_id = phoneme_table.get_blank_id()
 device = torch.device(args.device)
 if args.resume is True:
     print('Loading model ...')
@@ -68,7 +68,7 @@ else:
     if args.model_type == 'eesen':
         model = acoustic_model.EESENAcousticModel(
             feature_params.feature_size, args.hidden_size, args.num_layers,
-            num_labels, device, blank=blank_id)
+            phoneme_table.num_labels(), device, blank=blank_id)
     else:
         raise ValueError('model_type: {} is not supported.'.format(
             args.model_type))

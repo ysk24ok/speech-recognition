@@ -36,52 +36,6 @@ class Corpus(object):
             f.write('\n'.join(sentences))
 
 
-class VocabularySymbol(object):
-
-    def __init__(self):
-        self._words = []
-        self._word2id = {}
-        self._word2id['<epsilon>'] = len(self._words)
-        self._words.append('<epsilon>')
-        self._word2id['<unk>'] = len(self._words)
-        self._words.append('<unk>')
-
-    def create(self, path, corpus_path):
-        """Create a vocabulary symbol table from a corpus
-        Args:
-            path (str): vocabulary symbol filepath
-            corpus_path (str): filepath of a corpus
-        """
-        subprocess.run(['ngramsymbols', corpus_path, path])
-
-    def read(self, path):
-        """Read a vocabulary table from disk
-        Args:
-            path (str): vocabulary symbol filepath
-        """
-        self._words = []
-        self._word2id = {}
-        with open(path) as f:
-            for l in f:
-                word, word_id = l.split('\t')
-                self._word2id[word] = int(word_id)
-                self._words.append(word)
-
-    def get_id(self, word):
-        """Get id from a word
-        Args:
-            word (str): a word
-        """
-        return self._word2id[word]
-
-    def get_word(self, word_id):
-        """ Get a word from id
-        Args:
-            word_id (int): word id
-        """
-        return self._words[word_id]
-
-
 class _FstCompiler(object):
 
     def __init__(self):
@@ -107,17 +61,17 @@ class Token(object):
 
     """Maintain a mappping from acoustic labels to a single lexicon unit"""
 
-    def create_fst(self, acoustic_labels):
+    def create_fst(self, phoneme_table):
         """Create a token FST
         Args:
-            acoustic_labels (asr.acoustic_labels.AcousticLabels):
-                AcousticLabels object
+            phoneme_table (asr.label_table.PhonemeTable):
+                PhonemeTable object
         Returns:
             pywrapfst._MutableFst: token FST
         """
         fst_compiler = _FstCompiler()
-        epsilon_id = acoustic_labels.get_epsilon_id()
-        blank_id = acoustic_labels.get_blank_id()
+        epsilon_id = phoneme_table.get_epsilon_id()
+        blank_id = phoneme_table.get_blank_id()
         # start state
         start_state_id = 0
         fst_compiler.add_arc(
@@ -134,7 +88,7 @@ class Token(object):
             final_state_id, start_state_id, epsilon_id, epsilon_id)
         fst_compiler.set_final(final_state_id)
         state_id = final_state_id + 1
-        for label_id, label in acoustic_labels.get_all_labels().items():
+        for label_id, label in phoneme_table.get_all_labels().items():
             if label in ('<epsilon>', '<blank>'):
                 continue
             fst_compiler.add_arc(
@@ -144,7 +98,7 @@ class Token(object):
             fst_compiler.add_arc(
                 state_id, second_state_id, epsilon_id, epsilon_id)
             state_id += 1
-        for label_id, _ in acoustic_labels.get_all_auxiliary_labels().items():
+        for label_id, _ in phoneme_table.get_all_auxiliary_labels().items():
             fst_compiler.add_arc(
                 final_state_id, final_state_id, epsilon_id, label_id)
         return fst_compiler.compile()
@@ -154,8 +108,6 @@ class Lexicon(object):
 
     """Maintain a mapping from sequences of lexicon units to words
     Parameters:
-        _acoustic_labels (asr.acoustic_labels.AcousticLabels):
-            AcousticLabels object
         _lexicon (dict[str, dict[int]]):
             mapping whose key is a word and value is list of phoneme id
         _homophone (dict[str, list[str]]):
@@ -163,37 +115,24 @@ class Lexicon(object):
         _total_word_count (int): total word count
     """
 
-    def __init__(self, acoustic_labels):
-        self._acoustic_labels = acoustic_labels
+    def __init__(self):
         self._lexicon = defaultdict(lambda: defaultdict(int))
         self._total_word_count = 0
         self._homophone = defaultdict(lambda: [])
 
-    def add(self, word, kanas):
+    def add(self, word, lexicon_units):
         """Add a word and its pronunciation to the lexicon
         Args:
             word (str): A word
-            kanas (list[str]): Pronunciation of the word
+            lexicon_units (list[str]): Lexicon units (phonemes or moras)
         """
-        kanas_concat = ' '.join(kanas)
-        if kanas_concat == '':
+        lexicon_units_concat = ' '.join(lexicon_units)
+        if lexicon_units_concat == '':
             return
-        self._lexicon[word][kanas_concat] += 1
-        if word not in self._homophone[kanas_concat]:
-            self._homophone[kanas_concat].append(word)
+        self._lexicon[word][lexicon_units_concat] += 1
+        if word not in self._homophone[lexicon_units_concat]:
+            self._homophone[lexicon_units_concat].append(word)
         self._total_word_count += 1
-
-    def get_label_ids(self, kanas):
-        """
-        Args:
-            kanas (list[str]): list of kana
-        Returns:
-            list[int]: acoustic label ids
-        """
-        label_ids = []
-        for kana in kanas:
-            label_ids.extend(self._acoustic_labels.get_label_ids(kana))
-        return label_ids
 
     def save(self, path):
         """Save a lexicon to disk
@@ -201,9 +140,9 @@ class Lexicon(object):
             path (str): Lexicon filepath
         """
         lines = []
-        for word, freq_per_kanas in self._lexicon.items():
-            for kanas_concat, freq in freq_per_kanas.items():
-                line = '\t'.join([word, kanas_concat, str(freq)])
+        for word, freq_per_lexicon_units in self._lexicon.items():
+            for lexicon_units_concat, freq in freq_per_lexicon_units.items():
+                line = '\t'.join([word, lexicon_units_concat, str(freq)])
                 lines.append('{}\n'.format(line))
         with open(path, 'w') as f:
             f.writelines(lines)
@@ -215,62 +154,65 @@ class Lexicon(object):
         """
         with open(path) as f:
             for line in f:
-                word, kanas_concat, freq = line.split('\t')
-                if kanas_concat == '':
+                word, lexicon_units_concat, freq = line.split('\t')
+                if lexicon_units_concat == '':
                     continue
                 freq = int(freq)
-                self._lexicon[word][kanas_concat] += freq
-                self._homophone[kanas_concat].append(word)
+                self._lexicon[word][lexicon_units_concat] += freq
+                self._homophone[lexicon_units_concat].append(word)
                 self._total_word_count += freq
 
     def remove_less_frequent_word(self, min_freq):
         pairs = []
-        for word, freq_per_kanas in self._lexicon.items():
-            for kanas_concat, freq in freq_per_kanas.items():
+        for word, freq_per_lexicon_units in self._lexicon.items():
+            for lexicon_units_concat, freq in freq_per_lexicon_units.items():
                 if freq < min_freq:
-                    pairs.append((word, kanas_concat))
-        for word, kanas_concat in pairs:
-            freq = self._lexicon[word][kanas_concat]
-            del self._lexicon[word][kanas_concat]
+                    pairs.append((word, lexicon_units_concat))
+        for word, lexicon_units_concat in pairs:
+            freq = self._lexicon[word][lexicon_units_concat]
+            del self._lexicon[word][lexicon_units_concat]
             self._total_word_count -= freq
 
-    def create_fst(self, vocabulary_symbol, min_freq=10):
+    def create_fst(self, label_table, vocabulary_table, min_freq=10):
         """Create a lexicon FST
         Args:
-            vocabulary_symbol (asr.decoder.VocabularySymbol):
-                VocabularySymbol object
+            label_table (asr.label_table.LabelTable):
+                LabelTable object
+            vocabulary_table (asr.label_table.VocabularyTable):
+                VocabularyTable object
             min_freq (int): Minimum frequency for a word
-                            to include in lexicon
+                            to be included in lexicon
         Returns:
             pywrapfst._MutableFst: A lexicon FST
         """
         self.remove_less_frequent_word(min_freq)
         fst_compiler = _FstCompiler()
-        epsilon_id = self._acoustic_labels.get_epsilon_id()
+        epsilon_id = label_table.get_epsilon_id()
         start_state_id = 0
         fst_compiler.set_final(start_state_id)
         state_id = start_state_id + 1
-        for word, freq_per_kanas in self._lexicon.items():
-            word_id = vocabulary_symbol.get_id(word)
-            for kanas_concat, freq in freq_per_kanas.items():
+        for word, freq_per_lexicon_units in self._lexicon.items():
+            word_id = vocabulary_table.get_label_id(word)
+            for lexicon_units_concat, freq in freq_per_lexicon_units.items():
                 prob = -numpy.log(freq / self._total_word_count)
                 idx = 0
-                for kana in kanas_concat.split():
-                    for label_id in self._acoustic_labels.get_label_ids(kana):
-                        if idx == 0:
-                            fst_compiler.add_arc(
-                                start_state_id, state_id, label_id, word_id,
-                                prob)
-                        else:
-                            fst_compiler.add_arc(
-                                state_id - 1, state_id, label_id, epsilon_id)
-                        state_id += 1
-                        idx += 1
+                for lexicon_unit in lexicon_units_concat.split():
+                    label_id = label_table.get_label_id(lexicon_unit)
+                    if idx == 0:
+                        fst_compiler.add_arc(
+                            start_state_id, state_id, label_id, word_id,
+                            prob)
+                    else:
+                        fst_compiler.add_arc(
+                            state_id - 1, state_id, label_id, epsilon_id)
+                    state_id += 1
+                    idx += 1
                 # When there is no homophone, homophone_word_id will be 0
-                homophone_word_id = self._homophone[kanas_concat].index(word)
+                homophone_word_id = \
+                    self._homophone[lexicon_units_concat].index(word)
                 aux_label = '#{}'.format(homophone_word_id)
-                self._acoustic_labels.set_auxiliary_label(aux_label)
-                label_id = self._acoustic_labels.get_auxiliary_label_id(
+                label_table.set_auxiliary_label(aux_label)
+                label_id = label_table.get_auxiliary_label_id(
                     aux_label)
                 fst_compiler.add_arc(state_id - 1, state_id,
                                      label_id, epsilon_id)
@@ -448,13 +390,13 @@ class WFSTDecoder(object):
             path = path.prev_path
         return olabels
 
-    def get_words(self, path, vocabulary_symbol):
-        epsilon_id = vocabulary_symbol.get_id('<epsilon>')
+    def get_words(self, path, vocabulary_table):
+        epsilon_id = vocabulary_table.get_epsilon_id()
         words = []
         for olabel in self.backtrack(path):
             if olabel == epsilon_id:
                 continue
-            words.append(vocabulary_symbol.get_word(olabel))
+            words.append(vocabulary_table.get_label(olabel))
         return words
 
     def get_best_path(self, paths):
