@@ -6,8 +6,8 @@ import pytest
 import pywrapfst
 
 from asr import phonemes, kana2phonemes
-from asr.decoder import (
-    Corpus,
+from asr.corpus import Corpus
+from asr.eesen.decoder import (
     _FstCompiler,
     Grammar,
     Lexicon,

@@ -6,7 +6,7 @@ from asr.dataset import (
     DevelopmentDatasetRepository
 )
 from asr.dataset.csj import CSJParser
-from asr.decoder import Lexicon
+from asr.eesen.decoder import Lexicon
 from asr.feature import FeatureParams
 
 

@@ -4,8 +4,8 @@ import os
 import torch
 
 from asr import phonemes
-from asr.acoustic_model import AcousticModel
-from asr.decoder import WFSTDecoder
+from asr.eesen import EESENAcousticModel
+from asr.eesen.decoder import WFSTDecoder
 from asr.feature import extract_feature_from_wavfile, FeatureParams
 from asr.label_table import PhonemeTable, VocabularySymbolTable
 from asr.utils import pad_sequence
@@ -30,7 +30,7 @@ phoneme_table.add_labels(phonemes)
 epsilon_id = phoneme_table.get_epsilon_id()
 print('Loading model ...')
 model_path = os.path.join(args.workdir, args.model_file)
-model = AcousticModel.load(model_path, blank=phoneme_table.get_blank_id())
+model = EESENAcousticModel.load(model_path)
 feature_params_path = os.path.join(args.workdir, args.feature_params_file)
 feature_params = FeatureParams.load(feature_params_path)
 batch = []

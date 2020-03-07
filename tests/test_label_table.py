@@ -8,7 +8,7 @@ from asr.label_table import (
     VocabularyTable,
     VocabularySymbolTable
 )
-from asr.decoder import Corpus
+from asr.corpus import Corpus
 
 
 @pytest.fixture

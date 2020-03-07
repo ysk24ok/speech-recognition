@@ -2,7 +2,7 @@ import argparse
 import os
 
 from asr.dataset.csj import CSJParser
-from asr.decoder import Corpus
+from asr.corpus import Corpus
 from asr.label_table import VocabularyTable
 
 

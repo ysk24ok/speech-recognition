@@ -2,7 +2,7 @@ import argparse
 import os
 
 from asr import phonemes
-from asr.decoder import (
+from asr.eesen.decoder import (
     Grammar,
     Lexicon,
     Token,
