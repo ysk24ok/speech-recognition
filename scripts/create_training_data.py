@@ -51,16 +51,6 @@ parser.add_argument('--feature-params-file', type=str,
 parser.add_argument('--label-type', type=str, default='word',
                     choices=('phoneme', 'word'),
                     help='Targets to train.')
-parser.add_argument('--vocabulary-table-file', type=str, default='vocab.txt',
-                    help='Vocabulary table file name. '
-                    "If 'word' is not specified to '--label-type', "
-                    "this option is ignored.")
-parser.add_argument('--min-word-frequency', type=int, default=1,
-                    help='If word frequency in a vocabulary table is '
-                    'lower than this value, the word is ignored '
-                    'and recognized as unknown. '
-                    "If 'word' is not specified to '--label-type', "
-                    "this option is ignored.")
 parser.add_argument('--training-data-dirname', type=str, default='trdir',
                     help='Directory name where training data are saved')
 parser.add_argument('--development-data-dirname', type=str, default='devdir',
