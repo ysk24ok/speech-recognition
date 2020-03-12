@@ -1,5 +1,6 @@
 import argparse
 import os
+import sys
 
 import torch
 from torch.utils.data import DataLoader
@@ -85,12 +86,20 @@ feature_params_path = os.path.join(args.workdir, args.feature_params_file)
 feature_params = FeatureParams.load(feature_params_path)
 
 model_path = os.path.join(args.workdir, args.model_file)
+vocab_size = vocab_table.num_labels()
 if args.resume is True:
     print('Loading model ...')
     model = ListenAttendSpell.load(model_path)
+    if vocab_size != model.vocab_size:
+        errmsg = (
+            "Vocabulary size and model output size are not equal. "
+            "You may specify wrong value to '--min-word-frequency', "
+            "vocabulary size: {}, model output size: {}"
+        ).format(vocab_size, model.vocab_size)
+        print(errmsg, file=sys.stderr)
+        sys.exit(1)
 else:
     print('Initializing model ...')
-    vocab_size = vocab_table.num_labels()
     pad_id = vocab_table.get_pad_id()
     model = ListenAttendSpell(
         feature_params.feature_size, args.hidden_size, vocab_size,
