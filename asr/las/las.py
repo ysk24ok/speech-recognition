@@ -36,8 +36,8 @@ class ListenAttendSpell(NNModel):
             padded_input = padded_input[torch.arange(seq_size-1, -1, -1), :, :]
         return (
             padded_input,
-            pad_sequence(labels_input, padding_value=pad_id).T,
-            pad_sequence(labels_output, padding_value=pad_id).T
+            pad_sequence(labels_input, padding_value=pad_id),
+            pad_sequence(labels_output, padding_value=pad_id)
         )
 
     def __init__(self, input_size, hidden_size, vocab_size, embedding_size,
@@ -95,7 +95,7 @@ class ListenAttendSpell(NNModel):
         batch_size = inputs.shape[1]
         hidden = self.listener.init_hidden(batch_size)
         listener_outputs, listener_hidden = self.listener(inputs, hidden)
-        decoder_inputs = torch.transpose(self.embedding(labels), 0, 1)
+        decoder_inputs = self.embedding(labels)
         # NOTE: reshape hidden state whose shape is
         #       (layer size x num_directions, batch size, hidden size)
         #       into
@@ -123,11 +123,12 @@ class ListenAttendSpell(NNModel):
         labels_input = labels_input.to(device=device)
         labels_output = labels_output.to(device=device)
         output = self.forward(data, labels_input)
-        # TODO: correct?
         return self.loss(
-            torch.transpose(output, 0, 1).contiguous().view(
-                -1, self.vocab_size),
-            labels_output.contiguous().view(-1)
+            # (sequence length, batch size, vocabulary size)
+            #   => (sequence length * batch size, vocabulary size)
+            output.view(-1, self.vocab_size),
+            # (sequence length, batch size) => (sequence length * batch size,)
+            labels_output.view(-1)
         )
 
     def train(self, dataloader_tr, dataloaders_dev, epochs):
