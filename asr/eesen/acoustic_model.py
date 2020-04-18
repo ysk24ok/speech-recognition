@@ -58,7 +58,7 @@ class EESENAcousticModel(NNModel):
             return output.argmax(axis=2)
 
     def calc_loss(self, data, labels, input_lengths, label_lengths, device):
-        data = data.detach().requires_grad_().to(device)
+        data = data.to(device)
         labels = labels.to(device)
         input_lengths = input_lengths.to(device)
         label_lengths = label_lengths.to(device)
@@ -89,7 +89,7 @@ class EESENAcousticModel(NNModel):
             for data, labels, input_lengths, label_lengths in dataloader_tr:
                 self.optimizer.zero_grad()
                 loss = self.calc_loss(
-                    data.detach().requires_grad_(),
+                    data.requires_grad_(),
                     labels, input_lengths, label_lengths, device)
                 loss.backward()
                 self.optimizer.step()
