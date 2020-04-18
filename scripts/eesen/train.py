@@ -33,7 +33,7 @@ parser.add_argument('--num-layers', type=int, default=4,
                     help='number of layers of an acoustic model')
 parser.add_argument('--optimizer', type=str, default='adam',
                     help='Optimizer to use')
-parser.add_argument('--lr', type=float, default=0.01, help='Learning rate')
+parser.add_argument('--lr', type=float, default=0.001, help='Learning rate')
 parser.add_argument('--epochs', type=int, default=5,
                     help='number of epochs for training')
 parser.add_argument('--batch-size', type=int, default=32, help='batch size')
