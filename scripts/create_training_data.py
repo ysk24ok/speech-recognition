@@ -49,7 +49,7 @@ parser.add_argument('--feature-params-file', type=str,
                     default='feature_params.json',
                     help='Feature params file name')
 parser.add_argument('--label-type', type=str, default='word',
-                    choices=('phoneme', 'word'),
+                    choices=('phoneme', 'mora', 'character', 'word'),
                     help='Targets to train.')
 parser.add_argument('--training-data-dirname', type=str, default='trdir',
                     help='Directory name where training data are saved')

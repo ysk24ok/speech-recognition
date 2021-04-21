@@ -136,8 +136,22 @@ class CSJParser(DatasetParser):
         # This talk_id is for training set
         return None
 
-    def add_vocabulary(self, csj_talks, vocabulary_table, corpus,
-                       only_core=False):
+    def get_moras(self, suw, ipu_id, luw_id):
+        moras = []
+        suw_id = suw.getAttribute('SUWID')
+        for mora_tag in suw.getElementsByTagName('Mora'):
+            mora = mora_tag.getAttribute('MoraEntity')
+            if mora in ('', 'φ'):
+                mora_id = mora_tag.getAttribute('MoraID')
+                print("Skip Mora because MoraEntity='{}': "
+                      'IPUID={}, LUWID={}, SUWID={}, MoraID={}'.format(
+                        mora, ipu_id, luw_id, suw_id, mora_id))
+                continue
+            moras.append(mora)
+        return moras
+
+    def add_vocabulary(self, csj_talks, vocabulary_table, character_table,
+                       mora_table, corpus, only_core=False):
         for csj_talk in csj_talks:
             if only_core is True and csj_talk.is_core is False:
                 print('Skip noncore {}'.format(csj_talk.id))
@@ -167,6 +181,10 @@ class CSJParser(DatasetParser):
                         if suw.getAttribute('ClauseBoundaryLabel') == '[文末]':
                             end_of_sentence = True
                         vocabulary_table.add_label(word)
+                        for char in word:
+                            character_table.add_label(char)
+                        for mora in self.get_moras(suw, ipu_id, luw_id):
+                            mora_table.add_label(mora)
                         corpus.add(word, end_of_sentence=end_of_sentence)
             csj_talk.unref()
 
@@ -260,23 +278,15 @@ class CSJParser(DatasetParser):
                     print('Skip IPU because it contains masked SUW: '
                           'IPUID={}'.format(ipu_id))
                     return numpy.array([])
-                word = suw.getAttribute('PlainOrthographicTranscription')
+                word_tag_name = 'PlainOrthographicTranscription'
+                word = suw.getAttribute(word_tag_name)
                 if word == '':
                     print(
-                        "Skip SUW because PlainOrthographicTranscription='': "
+                        "Skip SUW because {}='': "
                         'IPUID={}, LUWID={}, SUWID={}'.format(
-                            ipu_id, luw_id, suw_id))
+                            word_tag_name, ipu_id, luw_id, suw_id))
                     continue
-                moras = []
-                for mora in suw.getElementsByTagName('Mora'):
-                    mora_id = mora.getAttribute('MoraID')
-                    kana = mora.getAttribute('MoraEntity')
-                    if kana in ('', 'φ',):
-                        print("Skip Mora because MoraEntity='{}': "
-                              'IPUID={}, LUWID={}, SUWID={}, MoraID={}'.format(
-                                kana, ipu_id, luw_id, suw_id, mora_id))
-                        continue
-                    moras.append(kana)
+                moras = self.get_moras(suw, ipu_id, luw_id)
                 if label_type == 'phoneme':
                     # NOTE: Our own mapping from character to phonemes is used
                     #       because some Mora tags don't have a Phoneme tag
@@ -287,8 +297,20 @@ class CSJParser(DatasetParser):
                     labels.extend(phonemes)
                     if self.lexicon is not None:
                         self.lexicon.add(word, phonemes)
+                elif label_type == 'mora':
+                    labels.extend(moras)
+                    if self.lexicon is not None:
+                        self.lexicon.add(word, moras)
+                elif label_type == 'character':
+                    chars = [char for char in word]
+                    labels.extend(chars)
+                    if self.lexicon is not None:
+                        self.lexicon.add(word, chars)
                 elif label_type == 'word':
                     labels.append(word)
+                else:
+                    errmsg = "Invalid 'label_type': {}".format(label_type)
+                    raise ValueError(errmsg)
         return labels
 
     def is_masked(self, suw):

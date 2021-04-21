@@ -59,15 +59,13 @@ class PhonemeTable(LabelTable):
                 for idx, label in enumerate(self._auxiliary_labels)}
 
 
-class VocabularyTable(LabelTable):
+class E2eSequenceTable(LabelTable):
 
-    def __init__(self, min_freq=1):
-        super(VocabularyTable, self).__init__()
+    def __init__(self):
+        super(E2eSequenceTable, self).__init__()
         self._basic_labels = ['<pad>', '<unk>', '<bos>', '<eos>']
         for label in self._basic_labels:
-            super(VocabularyTable, self).add_label(label)
-        self._freq_per_label = defaultdict(int)
-        self._min_freq = min_freq
+            super(E2eSequenceTable, self).add_label(label)
 
     def get_pad_id(self):
         return self.get_label_id('<pad>')
@@ -80,6 +78,57 @@ class VocabularyTable(LabelTable):
 
     def get_eos_id(self):
         return self.get_label_id('<eos>')
+
+    def save(self, path):
+        """Save the table to disk
+        Args:
+            path (str): A filepath of the table
+        """
+        with open(path, 'w') as f:
+            for label in self._labels:
+                if label in self._basic_labels:
+                    continue
+                f.write('{}\n'.format(label))
+
+
+class MoraTable(E2eSequenceTable):
+
+    @staticmethod
+    def load(path):
+        """Load a mora table from disk
+        Args:
+            path (str): A filepath of a mora table
+        """
+        mora_table = MoraTable()
+        with open(path) as f:
+            for line in f:
+                label = line.split('\t')
+                mora_table.add_label(label)
+        return mora_table
+
+
+class CharacterTable(E2eSequenceTable):
+
+    @staticmethod
+    def load(path):
+        """Load a character table from disk
+        Args:
+            path (str): A filepath of a character table
+        """
+        character_table = CharacterTable()
+        with open(path) as f:
+            for line in f:
+                label = line.split('\t')
+                character_table.add_label(label)
+        return character_table
+
+
+class VocabularyTable(E2eSequenceTable):
+
+    def __init__(self, min_freq=1):
+        super(VocabularyTable, self).__init__()
+        self._freq_per_label = defaultdict(int)
+        self._min_freq = min_freq
 
     def add_label(self, label):
         self._freq_per_label[label] += 1

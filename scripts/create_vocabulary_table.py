@@ -3,7 +3,7 @@ import os
 
 from asr.dataset.csj import CSJParser
 from asr.corpus import Corpus
-from asr.label_table import VocabularyTable
+from asr.label_table import CharacterTable, MoraTable, VocabularyTable
 
 
 parser = argparse.ArgumentParser()
@@ -12,6 +12,11 @@ parser.add_argument('workdir', type=str,
 parser.add_argument('dataset_path', type=str, help='Dataset path')
 parser.add_argument('--corpus-file', type=str, default='corpus.txt',
                     help='Corpus file name')
+parser.add_argument('--character-table-file', type=str,
+                    default='character.txt',
+                    help='Character table file name')
+parser.add_argument('--mora-table-file', type=str, default='mora.txt',
+                    help='Mora table file name')
 parser.add_argument('--vocabulary-table-file', type=str, default='vocab.txt',
                     help='Vocabulary table file name')
 parser.add_argument('--dataset-type', type=str, default='csj', choices=['csj'],
@@ -22,12 +27,15 @@ args = parser.parse_args()
 
 print('Creating vocabulary table and corpus ...')
 corpus = Corpus()
+character_table = CharacterTable()
+mora_table = MoraTable()
 vocabulary_table = VocabularyTable()
 if args.dataset_type == 'csj':
     csj_parser = CSJParser(args.dataset_path)
     tr_talk_sets, _ = csj_parser.get_talks(1)
     for tr_talks in tr_talk_sets:
-        csj_parser.add_vocabulary(tr_talks, vocabulary_table, corpus,
+        csj_parser.add_vocabulary(tr_talks, vocabulary_table, character_table,
+                                  mora_table, corpus,
                                   only_core=args.use_subset)
 else:
     raise ValueError('dataset_type: {} is not supported'.format(
@@ -38,3 +46,9 @@ corpus.save(corpus_path)
 print('Saving vocabulary table ...')
 vocabulary_table_path = os.path.join(args.workdir, args.vocabulary_table_file)
 vocabulary_table.save(vocabulary_table_path)
+print('Saving character table ...')
+character_table_path = os.path.join(args.workdir, args.character_table_file)
+character_table.save(character_table_path)
+print('Saving a mora table ...')
+mora_table_path = os.path.join(args.workdir, args.mora_table_file)
+mora_table.save(mora_table_path)
